@@ -107,7 +107,9 @@ new Vue({
 
         queryShopInfo: function() {
             let data = new FormData();
+            var that = this;
             data.append("roomId",getQueryStr("roomId"));
+            data.append("anchorId",that.initInfo.anchorId);
             var that = this;
             httpPost(queryShopInfoUrl,data).then(
                 resp=>{
@@ -135,6 +137,8 @@ new Vue({
 
         queryShopDetailInfo:function(skuId) {
             let data = new FormData();
+            var that = this;
+            data.append("anchorId",that.initInfo.anchorId);
             data.append("skuId",skuId);
             var that = this;
             httpPost(queryShopDetailInfoUrl,data).then(
