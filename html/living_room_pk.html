@@ -22,7 +22,7 @@
             <img src="../img/livingroom.jpg" class="top-logo" alt="">
             </span>
             <span class="top-title" style="cursor: pointer;" onclick="window.location.href='./living_room_list.html'">
-                旗鱼直播
+                鱼鱼直播
             </span>
             <span class="top-title top-title-link" onclick="window.location.href='./living_room_list.html'">
                 直播间
@@ -120,7 +120,7 @@
                 <div class="gift_item" v-for="item in giftList">
                     <img @click="sendGift(item.giftId)" :src="item.coverImgUrl" class="gift_img" alt="">
                     <div class="gift_item_name">{{item.giftName}}</div>
-                    <div class="gift_item_price">{{item.price}}旗鱼币</div>
+                    <div class="gift_item_price">{{item.price}}鱼鱼币</div>
                 </div>
             </div>
         </el-col>
@@ -136,7 +136,7 @@
             <div style="text-align: center;">
                 <span v-for="item in payProducts">
                     <button class="recharge_btn" :id="item.id" @click="payProduct(item.id)">{{item.name}}<br>
-                        <span class="coin_um">{{item.coinNum}}旗鱼币</span>
+                        <span class="coin_um">{{item.coinNum}}鱼鱼币</span>
                     </button>
                 </span>
             </div>

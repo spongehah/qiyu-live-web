@@ -49,7 +49,6 @@ new Vue({
         this.initSvga();
         this.initGiftConfig();
         this.listPayProduct();
-        this.queryShopInfo();
     },
 
     beforeDestroy() {
@@ -106,14 +105,19 @@ new Vue({
         },
 
         queryShopInfo: function() {
+            // 检查anchorId是否已经初始化
+            if (!this.initInfo || !this.initInfo.anchorId) {
+                console.error("anchorId未初始化，无法查询商品信息");
+                return;
+            }
+            
             let data = new FormData();
             var that = this;
-            data.append("roomId",getQueryStr("roomId"));
-            data.append("anchorId",that.initInfo.anchorId);
-            var that = this;
-            httpPost(queryShopInfoUrl,data).then(
-                resp=>{
-                    if(isSuccess(resp)) {
+            data.append("roomId", getQueryStr("roomId"));
+            data.append("anchorId", that.initInfo.anchorId);
+            httpPost(queryShopInfoUrl, data).then(
+                resp => {
+                    if (isSuccess(resp)) {
                         that.shopInfoList = resp.data;
                     }
                 }
@@ -287,27 +291,47 @@ new Vue({
         //直播间初始化配置加载时候调用
         anchorConfig: function () {
             let data = new FormData();
-			data.append("roomId",getQueryStr("roomId"));
+            data.append("roomId", getQueryStr("roomId"));
             var that = this;
-            httpPost(anchorConfigUrl, data)
-                .then(resp => {
-                    if (isSuccess(resp)) {
-                        if(resp.data.roomId>0) {
-                            that.initInfo = resp.data;
-                            // if(that.initInfo.userId == "285608972927369200") {
-                            //     that.initInfo.userId = "285608972927369217"
-                            // }
-                            // if(this.initInfo.anchorId == "285608972927369200") {
-                            //     that.initInfo.anchorId = "285608972927369217"
-                            // }
+            
+            // 直接使用原生的fetch API，然后手动处理JSON，以避免大整数精度问题
+            fetch(anchorConfigUrl, {
+                method: 'POST',
+                body: data,
+                credentials: 'include'
+            })
+            .then(response => response.text()) // 获取原始文本
+            .then(responseText => {
+                // 手动解析JSON
+                let jsonObj;
+                try {
+                    // 将userId和anchorId处理为字符串
+                    const modifiedText = responseText.replace(/"userId":(\d+)/, '"userId":"$1"')
+                                                    .replace(/"anchorId":(\d+)/, '"anchorId":"$1"');
+                    jsonObj = JSON.parse(modifiedText);
+                    
+                    if (jsonObj.code === 200) {
+                        if (jsonObj.data.roomId > 0) {
+                            that.initInfo = jsonObj.data;
                             that.connectImServer();
-                            that.redPacketConfigCode = resp.data.redPacketConfigCode;
-                            that.showPrepareBtn = (that.redPacketConfigCode!=null);
+                            that.redPacketConfigCode = jsonObj.data.redPacketConfigCode;
+                            that.showPrepareBtn = (that.redPacketConfigCode != null);
+                            
+                            // 在初始化配置加载完成后再调用queryShopInfo
+                            that.queryShopInfo();
                         } else {
-                            this.$message.error('直播间已不存在');
+                            that.$message.error('直播间已不存在');
                         }
                     }
-                });
+                } catch (e) {
+                    console.error("JSON解析错误:", e);
+                    that.$message.error('数据解析错误');
+                }
+            })
+            .catch(error => {
+                console.error('请求错误:', error);
+                that.$message.error('系统出小差了');
+            });
         },
 
         prepareRedPacket: function() {
@@ -351,7 +375,7 @@ new Vue({
                 if (isSuccess(resp)) {
                     that.imServerConfig = resp.data;
                     let url = "ws://"+that.imServerConfig.wsImServerAddress+"/" + that.imServerConfig.token+"/"+that.initInfo.userId+"/1001/"+this.roomId;
-                    //let url = "ws://"+that.imServerConfig.wsImServerAddress+"/token=" + that.imServerConfig.token+"&&userId=285608972927369217"
+                    // let url = "ws://"+that.imServerConfig.wsImServerAddress+"/token=" + that.imServerConfig.token+"&&userId="+that.initInfo.userId;
                     console.log(url);
                     that.websock = new WebSocket(url);
                     that.websock.onmessage = that.websocketOnMessage;

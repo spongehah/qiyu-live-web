@@ -35,7 +35,6 @@ new Vue({
         lastChooseAnchorId: 0,
         anchorImg: '',
         pkObjImg: '',
-        pkObjId: 0,
         pkEnd: false
     },
 
@@ -201,22 +200,48 @@ new Vue({
             let data = new FormData();
             data.append("roomId", getQueryStr("roomId"));
             var that = this;
-            httpPost(anchorConfigUrl, data)
-                .then(resp => {
-                    if (isSuccess(resp)) {
-                        if (resp.data.roomId > 0) {
-                            that.initInfo = resp.data;
+            
+            // 直接使用原生的fetch API，然后手动处理JSON，以避免大整数精度问题
+            fetch(anchorConfigUrl, {
+                method: 'POST',
+                body: data,
+                credentials: 'include'
+            })
+            .then(response => response.text()) // 获取原始文本
+            .then(responseText => {
+                // 手动解析JSON
+                let jsonObj;
+                try {
+                    // 将userId和anchorId处理为字符串
+                    const modifiedText = responseText.replace(/"userId":(\d+)/, '"userId":"$1"')
+                                                     .replace(/"anchorId":(\d+)/, '"anchorId":"$1"')
+                                                     .replace(/"pkUserId":(\d+)/, '"pkUserId":"$1"')
+                                                     .replace(/"pkObjId":(\d+)/, '"pkObjId":"$1"');
+                    jsonObj = JSON.parse(modifiedText);
+                    
+                    if (jsonObj.code === 200) {
+                        if (jsonObj.data.roomId > 0) {
+                            that.initInfo = jsonObj.data;
                             that.anchorImg = that.initInfo.avatar;
                             that.pkUserId = that.initInfo.anchorId;
                             that.pkObjId = that.initInfo.pkObjId;
+                            // that.pkObjId = "450469729216233473"
                             that.connectImServer();
                         } else {
-                            this.$message.error('直播间已不存在');
+                            that.$message.error('直播间已不存在');
                         }
                     } else {
-                        this.$message.error(resp.msg);
+                        that.$message.error(jsonObj.msg);
                     }
-                });
+                } catch (e) {
+                    console.error("JSON解析错误:", e);
+                    that.$message.error('数据解析错误');
+                }
+            })
+            .catch(error => {
+                console.error('请求错误:', error);
+                that.$message.error('系统出小差了');
+            });
         },
 
 
@@ -226,7 +251,9 @@ new Vue({
                 .then(resp => {
                     if (isSuccess(resp)) {
                         that.imServerConfig = resp.data;
-                        let url = "ws://" + that.imServerConfig.wsImServerAddress + "/" + that.imServerConfig.token + "/" + that.initInfo.userId + "/1001/" + this.roomId;
+                        // 确保userId作为字符串处理，避免bigInt精度问题
+                        let userId = typeof that.initInfo.userId === 'string' ? that.initInfo.userId : String(that.initInfo.userId);
+                        let url = "ws://" + that.imServerConfig.wsImServerAddress + "/" + that.imServerConfig.token + "/" + userId + "/1001/" + this.roomId;
                         console.log(url);
                         that.websock = new WebSocket(url);
                         that.websock.onmessage = that.websocketOnMessage;
@@ -285,8 +312,19 @@ new Vue({
                     this.changeBarWidth(respMsg.pkNum);
                 } else if (respData.bizCode == 5559) {
                     this.$message.success("pk用户已上线");
-                    let respMsg = JSON.parse(respData.data);
-                    this.pkObjId = respMsg.pkObjId;
+                    // 获取原始数据字符串
+                    const rawData = respData.data;
+                    console.log("原始数据:", rawData);
+                    
+                    // 使用正则表达式从JSON字符串中直接提取pkObjId
+                    const pkObjIdMatch = rawData.match(/"pkObjId":(\d+)/);
+                    if (pkObjIdMatch && pkObjIdMatch[1]) {
+                        this.pkObjId = pkObjIdMatch[1]; // 保持原始字符串格式
+                        console.log("从原始数据提取的pkObjId:", this.pkObjId);
+                    }
+                    
+                    // 然后再解析JSON获取其他数据
+                    let respMsg = JSON.parse(rawData);
                     this.pkObjImg = respMsg.pkObjAvatar;
                 }
                 this.sendAckCode(respData);
@@ -300,7 +338,9 @@ new Vue({
         },
 
         sendAckCode: function (respData) {
-            let jsonStr = { "userId": this.initInfo.userId, "appId": 10001, "msgId": respData.msgId };
+            // 确保userId作为字符串处理，避免bigInt精度问题
+            let userId = typeof this.initInfo.userId === 'string' ? this.initInfo.userId : String(this.initInfo.userId);
+            let jsonStr = { "userId": userId, "appId": 10001, "msgId": respData.msgId };
             let bodyStr = JSON.stringify(jsonStr);
             let ackMsgStr = { "magic": 19231, "code": 1005, "len": bodyStr.length, "body": bodyStr };
             this.websocketSend(JSON.stringify(ackMsgStr));
@@ -318,7 +358,9 @@ new Vue({
             console.log('首次登录成功');
             let that = this;
             //发送一个心跳包给到服务端
-            let jsonStr = { "userId": this.initInfo.userId, "appId": 10001 };
+            // 确保userId作为字符串处理，避免bigInt精度问题
+            let userId = typeof this.initInfo.userId === 'string' ? this.initInfo.userId : String(this.initInfo.userId);
+            let jsonStr = { "userId": userId, "appId": 10001 };
             let bodyStr = JSON.stringify(jsonStr);
             let heartBeatJsonStr = { "magic": 19231, "code": 1004, "len": bodyStr.length, "body": bodyStr };
             setInterval(function () {
@@ -352,7 +394,9 @@ new Vue({
             //发送评论消息给到im服务器
             let msgBody = { "roomId": this.roomId, "type": 1, "content": this.form.review, "senderName": this.initInfo.watcherNickName, "senderAvatar": this.initInfo.watcherAvatar };
             console.log(this.initInfo);
-            let jsonStr = { "userId": this.initInfo.userId, "appId": 10001, "bizCode": 5555, "data": JSON.stringify(msgBody) };
+            // 确保userId作为字符串处理，避免bigInt精度问题
+            let userId = typeof this.initInfo.userId === 'string' ? this.initInfo.userId : String(this.initInfo.userId);
+            let jsonStr = { "userId": userId, "appId": 10001, "bizCode": 5555, "data": JSON.stringify(msgBody) };
             let bodyStr = JSON.stringify(jsonStr);
             console.log('发送消息');
             let reviewMsg = { "magic": 19231, "code": 1003, "len": bodyStr.length, "body": bodyStr };
@@ -363,7 +407,6 @@ new Vue({
                 var div = document.getElementById('talk-content-box')
                 div.scrollTop = div.scrollHeight
             })
-
         }
 
 
